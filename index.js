@@ -7,6 +7,7 @@ const program = require('commander');
 const chalk = require('chalk');
 const http = require('http');
 const inquirer = require("inquirer")
+const _ = require('lodash');
 
 const openSubtitles = new OS({
     useragent:'OSTestUserAgentTemp'
@@ -46,15 +47,16 @@ function findSubs(fileName, lang){
             filename: fileName,
             limit : 5
         }).then((subs)=>{
-            if(!subs[lang] || !subs[lang].length) return console.log('No subtitles available for desired language')
+            const langSubs = subs[lang];
+            if(!langSubs || !langSubs.length) return console.log('No subtitles available for desired language')
 
             inquirer.prompt({
                 type : "list",
                 name :"choice",
                 message : `There is ${subs[lang].length} options. Wich one do you choose ?`,
-                choices : subs[lang].map((it,idx)=>{ return {name : it.filename, value : idx}})
+                choices : _.sortBy(langSubs, sub => -sub.score).map((it,idx)=>{ return {name : `${it.filename}\t\tScore ${it.score}`, value : idx}})
             }).then( ({choice}) => {
-                var sub = subs[lang][choice]
+                var sub = langSubs[choice]
 
                 var srtName = fileName.replace(/\.[^/.]+$/, "")+".srt"
 
