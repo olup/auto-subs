@@ -18,14 +18,13 @@ const openSubtitles = new OS({
 program
   .version('0.0.1')
   .option('-f, --file [value]', 'File name')
-  .option('-l, --lang [value]', 'Subtitles languages', 'en')
+  .option('-l, --lang [value]', 'Subtitles languages')
   .parse(process.argv);
 
-var fileName = ""
+var fileName = program.file
 var lang = program.lang
 
-if (program.file) {
-    fileName = program.file
+if (fileName) {
     findSubs(fileName, lang)
 }
 else findFile( findSubs )
@@ -37,9 +36,6 @@ function findSubs(fileName, lang){
 
     if(!fileName) return console.log('No file given or found')
 
-    console.log(`Loading subtitles for ${chalk.green(fileName)} in language ${chalk.green(lang.toUpperCase())}`)
-
-
     openSubtitles.login().then(()=>{
         openSubtitles.search({
             sublanguageid: lang,
@@ -47,25 +43,31 @@ function findSubs(fileName, lang){
             filename: fileName,
             limit : 5
         }).then((subs)=>{
-            const langSubs = subs[lang];
-            if(!langSubs || !langSubs.length) return console.log('No subtitles available for desired language')
+            if(!subs) return console.log('No subtitles available for this video')
 
-            inquirer.prompt({
-                type : "list",
-                name :"choice",
-                message : `There is ${subs[lang].length} options. Wich one do you choose ?`,
-                choices : _.sortBy(langSubs, sub => -sub.score).map((it,idx)=>{ return {name : `${it.filename}\t\tScore ${it.score}`, value : idx}})
-            }).then( ({choice}) => {
-                var sub = langSubs[choice]
+            chooseLanguage(subs, lang, language => {
+                const langSubs = subs[language];
+                if(!langSubs || !langSubs.length) return console.log('No subtitles available for desired language')
 
-                var srtName = fileName.replace(/\.[^/.]+$/, "")+".srt"
+                console.log(`Loading subtitles for ${chalk.green(fileName)} in language ${chalk.green(language.toUpperCase())}`)
 
-                var file = fs.createWriteStream(srtName);
-                var request = http.get(sub.url, (response) => {
-                    console.log(`Downloaded ${chalk.green(srtName)}`)
-                    response.pipe(file);
+                inquirer.prompt({
+                    type : "list",
+                    name :"choice",
+                    message : `There is ${subs[language].length} options. Wich one do you choose ?`,
+                    choices : _.sortBy(langSubs, sub => -sub.score).map((it,idx)=>{ return {name : `${it.filename}\t\tScore ${it.score}`, value : idx}})
+                }).then( ({choice}) => {
+                    var sub = langSubs[choice]
+
+                    var srtName = fileName.replace(/\.[^/.]+$/, "")+".srt"
+
+                    var file = fs.createWriteStream(srtName);
+                    var request = http.get(sub.url, (response) => {
+                        console.log(`Downloaded ${chalk.green(srtName)}`)
+                        response.pipe(file);
+                    });
                 });
-            });
+            })
 
         })
     }).catch(err => {
@@ -79,6 +81,8 @@ function findFile( cb ){
         return fs.statSync(file).isFile() && file.match(/.*(\.mp4|\.avi|\.mpeg2|\.mkv)/g)
     })
 
+    if(!files.length) return console.log(chalk.red('No video file found'))
+
     inquirer.prompt({
             type : "list",
             name :"choice",
@@ -87,5 +91,21 @@ function findFile( cb ){
         }).then( ({choice}) => {
             cb(files[choice], lang)
         });
+
+}
+
+function chooseLanguage( languageList, lang, cb ){
+    if(lang) return cb(lang)
+    else{
+        inquirer.prompt({
+            type : "list",
+            name :"choice",
+            default : "en",
+            message : `Multiple Languages are available. Wich one do you choose ?`,
+            choices : Object.keys(languageList).sort().map(it=>{ return {name : it, value : it}})
+        }).then( ({choice}) => {
+            return cb(choice)
+        });
+    }
 
 }
